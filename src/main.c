@@ -1,5 +1,6 @@
 #define _XOPEN_SOURCE 800
 #define _BSD_SOURCE
+#define _GNU_SOURCE
 #include <getopt.h>
 #include <ev.h>
 #include <stdio.h>
