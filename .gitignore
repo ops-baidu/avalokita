@@ -1,0 +1,9 @@
+.cproject
+.project
+cmake_install.cmake
+CMakeCache.txt
+CMakeFiles
+Makefile
+install_manifest.txt
+src/config.h
+src/avalokita
