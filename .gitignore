@@ -5,5 +5,5 @@ CMakeCache.txt
 CMakeFiles
 Makefile
 install_manifest.txt
-src/config.h
-src/avalokita
+output/
+build/

@@ -10,7 +10,8 @@ PATH="$CMAKE_PATH/bin:$LIBEV_PATH/bin:$LIBCURL_PATH/bin:$OPENSSL_PATH/bin:$ZLIB_
 export CMAKE_INCLUDE_PATH="$LIBEV_PATH/include:$LIBCURL_PATH/include:$OPENSSL_PATH/include:$ZLIB_PATH/include"
 export CMAKE_LIBRARY_PATH="$LIBEV_PATH/lib:$LIBCURL_PATH/lib:$OPENSSL_PATH/lib:$ZLIB_PATH/lib"
 
-cmake .
+rm -rf build output && mkdir -p build && cd build
+cmake -DCMAKE_INSTALL_PREFIX=/ ..
 make
-make DESTDIR="$(pwd)/output" install
-
+make DESTDIR="$(pwd)/../output" install
+cd -
