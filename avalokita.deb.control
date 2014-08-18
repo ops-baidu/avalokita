@@ -1,0 +1,10 @@
+Package: avalokita
+Version: #VERSION#-1
+Architecture: amd64
+Maintainer: liugao02@baidu.com
+Installed-Size: 312
+Depends: libc6
+Priority: optional
+Homepage: https://github.com/ops-baidu/avalokita
+Description: A supervise(daemon tools) enhancement
+ A supervise(daemon tools) enhancement, support daemonize and remote upgrade.
