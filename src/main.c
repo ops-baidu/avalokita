@@ -468,7 +468,6 @@ born_executor(void) {
     int ret = -1;
 
     assert(executor.runtime.pid == 0);
-
     INFO("run command %s", arguments.command_path);
 
     ret = fork();
@@ -486,7 +485,7 @@ born_executor(void) {
 
         ret = dup2(executor.stderr_fd, STDERR_FILENO);
         if (ret < 0) {
-            ERROR_LIBC("dup2() for stderr_file");
+            ERROR_LIBC("dup2() for stderr");
             exit(127);
         }
 
@@ -495,7 +494,6 @@ born_executor(void) {
     }
 
     executor.runtime.pid = ret;
-
     return 0;
 }
 
@@ -628,7 +626,7 @@ quit(EV_P_ ev_signal *w, int revents){
     if (executor.runtime.pid == 0) {
         // command is not running, just break loop.
         ev_break(EV_A_ EVBREAK_ALL);
-    } else {
+    } else if (!quit_all) {
         kill_executor(EV_A_ w, revents);
         quit_all = 1;
     }
@@ -730,7 +728,7 @@ daemonize(void) {
     umask(022);
     fclose(stdin);
 
-    i = getdtablesize();
+    max_fd = getdtablesize();
     for (i = 3; i < max_fd; i++) {
         close(i);
     }
