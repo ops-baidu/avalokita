@@ -506,10 +506,9 @@ bear_child(EV_P_ ev_timer *w, int revents) {
     if (ret < 0) {
         ERROR("bear child failed.");
         ev_timer_again(EV_A_ w);
-        return;
+    } else {
+    	ev_timer_stop(EV_A_ w);
     }
-
-    ev_timer_stop(EV_A_ w);
 }
 
 static void
@@ -522,28 +521,7 @@ kill_child(EV_P_ ev_timer *w, int revents) {
 }
 
 static void
-block_sigchld(void){
-    sigset_t signals;
-
-    sigemptyset(&signals);
-    sigaddset(&signals, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &signals, NULL);
-}
-
-static void
-unblock_sigchld(void){
-    sigset_t signals;
-
-    sigemptyset(&signals);
-    sigaddset(&signals, SIGCHLD);
-    sigprocmask(SIG_UNBLOCK, &signals, NULL);
-}
-
-static void
 bear_children(EV_P_ ev_idle *w, int revents) {
-    // block SIGCHLD to prevent race condition.
-    block_sigchld();
-
     if (arguments.update_url[0] != 0) {
         bear_child(EV_A_ &downloader.runtime.bear_after, revents);
     }
@@ -552,9 +530,7 @@ bear_children(EV_P_ ev_idle *w, int revents) {
         bear_child(EV_A_ &executor.runtime.bear_after, revents);
     }
 
-    unblock_sigchld();
     ev_idle_stop(EV_A_ w);
-    return;
 }
 
 static void
@@ -572,7 +548,8 @@ dispose_zombies(EV_P_ ev_child *w, int revents) {
         if (quit_all) {
             ev_break(EV_A_ EVBREAK_ALL);
         } else {
-            // Ensure no one threat me.
+            // Ensure no one threat me. If executor was exited because SIGTERM, kill_after always
+        	// active, should stop it.
             ev_timer_stop(EV_A_ &executor.runtime.kill_after);
             // Wait if restart interval is not 0.
             ev_timer_again(EV_A_ &executor.runtime.bear_after);
@@ -595,7 +572,7 @@ dispose_zombies(EV_P_ ev_child *w, int revents) {
                             executor.runtime.pid);
                     kill(executor.runtime.pid, SIGTERM);
                     ev_timer_again(EV_A_ &executor.runtime.kill_after);
-                } else if (executor.runtime.pid == 0 &&!ev_is_active(&executor.runtime.bear_after)) {
+                } else if (executor.runtime.pid == 0 && !ev_is_active(&executor.runtime.bear_after)) {
                     // executor is not running and no one bearing it, bear it now.
                     bear_child(EV_A_ &executor.runtime.bear_after, revents);
                 }
