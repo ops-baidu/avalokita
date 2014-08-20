@@ -61,12 +61,12 @@ struct {
 
 struct ProcessRuntime {
     pid_t pid;
-    ev_timer born_after;
+    ev_timer bear_after;
     ev_timer kill_after;
-    int (*born)(void);
+    int (*bear)(void);
 };
 
-static int born_executor(void);
+static int bear_executor(void);
 
 struct {
     struct ProcessRuntime runtime;
@@ -75,15 +75,15 @@ struct {
     int                   stderr_fd;
 } executor = {
     .runtime.pid = 0,
-    .runtime.born_after = {0},
+    .runtime.bear_after = {0},
     .runtime.kill_after = {0},
-    .runtime.born = born_executor,
+    .runtime.bear = bear_executor,
     .executable_existed = 0,
     .stdout_fd = -1,
     .stderr_fd = -1,
 };
 
-static int born_downloader(void);
+static int bear_downloader(void);
 
 struct {
     struct ProcessRuntime runtime;
@@ -94,9 +94,9 @@ struct {
     char                  new_executable[PATH_MAX];
 } downloader = {
     .runtime.pid = 0,
-    .runtime.born_after = {0},
+    .runtime.bear_after = {0},
     .runtime.kill_after = {0},
-    .runtime.born = born_downloader,
+    .runtime.bear = bear_downloader,
     .signature = {0},
     .slen = 0,
     .cert = {0},
@@ -139,7 +139,7 @@ write_executable(void *contents, size_t size, size_t nmemb, void *userp) {
 
 static int
 download(const char *url, size_t writer(void *, size_t, size_t, void *), void *writer_data,
-		size_t max_file_size) {
+        size_t max_file_size) {
     int i = 0;
     long status = 0;
     CURL *curl = NULL;
@@ -445,7 +445,7 @@ tell_child_do_not_live_alone(void) {
 }
 
 static int
-born_downloader(void) {
+bear_downloader(void) {
     int ret = -1;
 
     assert(downloader.runtime.pid == 0);
@@ -464,7 +464,7 @@ born_downloader(void) {
 }
 
 static int
-born_executor(void) {
+bear_executor(void) {
     int ret = -1;
 
     assert(executor.runtime.pid == 0);
@@ -498,13 +498,13 @@ born_executor(void) {
 }
 
 static void
-born_child(EV_P_ ev_timer *w, int revents) {
+bear_child(EV_P_ ev_timer *w, int revents) {
     int ret = -1;
-    struct ProcessRuntime *proc = container_of(w, struct ProcessRuntime, born_after);
+    struct ProcessRuntime *proc = container_of(w, struct ProcessRuntime, bear_after);
 
-    ret = proc->born();
+    ret = proc->bear();
     if (ret < 0) {
-        ERROR("born child failed.");
+        ERROR("bear child failed.");
         ev_timer_again(EV_A_ w);
         return;
     }
@@ -540,16 +540,16 @@ unblock_sigchld(void){
 }
 
 static void
-born_children(EV_P_ ev_idle *w, int revents) {
+bear_children(EV_P_ ev_idle *w, int revents) {
     // block SIGCHLD to prevent race condition.
     block_sigchld();
 
     if (arguments.update_url[0] != 0) {
-        born_child(EV_A_ &downloader.runtime.born_after, revents);
+        bear_child(EV_A_ &downloader.runtime.bear_after, revents);
     }
 
     if (executor.executable_existed) {
-        born_child(EV_A_ &executor.runtime.born_after, revents);
+        bear_child(EV_A_ &executor.runtime.bear_after, revents);
     }
 
     unblock_sigchld();
@@ -575,7 +575,7 @@ dispose_zombies(EV_P_ ev_child *w, int revents) {
             // Ensure no one threat me.
             ev_timer_stop(EV_A_ &executor.runtime.kill_after);
             // Wait if restart interval is not 0.
-            ev_timer_again(EV_A_ &executor.runtime.born_after);
+            ev_timer_again(EV_A_ &executor.runtime.bear_after);
         }
     } else if (w->rpid == downloader.runtime.pid) {
         downloader.runtime.pid = 0;
@@ -589,21 +589,21 @@ dispose_zombies(EV_P_ ev_child *w, int revents) {
             INFO("downloader process exit with status %d", WEXITSTATUS(w->rstatus));
             // New version executable was ready, restart the command.
             if (WEXITSTATUS(w->rstatus) == DOWNLOADER_EXIT_REASON_NEW_VERSION_FOUND) {
-                if (executor.runtime.pid != 0) {
-                    // executor is running, kill it.
+                if (executor.runtime.pid != 0 && !ev_is_active(&executor.runtime.kill_after)) {
+                    // executor is running and no one killing it, kill it now.
                     INFO("stopping command %s pid %d ...", arguments.command_path,
                             executor.runtime.pid);
                     kill(executor.runtime.pid, SIGTERM);
                     ev_timer_again(EV_A_ &executor.runtime.kill_after);
-                } else {
-                    // executor is not running, run it now.
-                    born_child(EV_A_ &executor.runtime.born_after, revents);
+                } else if (executor.runtime.pid == 0 &&!ev_is_active(&executor.runtime.bear_after)) {
+                    // executor is not running and no one bearing it, bear it now.
+                    bear_child(EV_A_ &executor.runtime.bear_after, revents);
                 }
             }
         }
 
         // trigger downloader after update interval.
-        ev_timer_again(EV_A_ &downloader.runtime.born_after);
+        ev_timer_again(EV_A_ &downloader.runtime.bear_after);
     } else {
         ERROR("unknown child process exited: %d", w->rpid);
     }
@@ -646,16 +646,16 @@ run_main_loop() {
     ev_child_init(&child_watcher, dispose_zombies, 0, 0);
     ev_child_start(EV_DEFAULT_ &child_watcher);
 
-    // child processes should born in the idle watcher callback (which will be called after the
+    // child processes should bear in the idle watcher callback (which will be called after the
     // event loop is running). Otherwise child processes maybe exit before the event loop running,
     // then leading to child process events lose.
     ev_idle idle_watcher;
-    ev_idle_init(&idle_watcher, born_children);
+    ev_idle_init(&idle_watcher, bear_children);
     ev_idle_start(EV_DEFAULT_ &idle_watcher);
 
-    ev_timer_init(&executor.runtime.born_after, born_child, 0, arguments.restart_interval);
+    ev_timer_init(&executor.runtime.bear_after, bear_child, 0, arguments.restart_interval);
     ev_timer_init(&executor.runtime.kill_after, kill_child, 0, MAX_KILL_TIMEOUT);
-    ev_timer_init(&downloader.runtime.born_after, born_child, 0, arguments.update_interval);
+    ev_timer_init(&downloader.runtime.bear_after, bear_child, 0, arguments.update_interval);
     ev_timer_init(&downloader.runtime.kill_after, kill_child, 0, MAX_KILL_TIMEOUT);
 
     if (ev_run(EV_DEFAULT_ 0)) {
