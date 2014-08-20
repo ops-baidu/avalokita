@@ -61,8 +61,8 @@ struct {
 
 struct ProcessRuntime {
     pid_t pid;
-    ev_timer bear_after;
-    ev_timer kill_after;
+    ev_timer bear_delay;
+    ev_timer kill_delay;
     int (*bear)(void);
 };
 
@@ -75,8 +75,8 @@ struct {
     int                   stderr_fd;
 } executor = {
     .runtime.pid = 0,
-    .runtime.bear_after = {0},
-    .runtime.kill_after = {0},
+    .runtime.bear_delay = {0},
+    .runtime.kill_delay = {0},
     .runtime.bear = bear_executor,
     .executable_existed = 0,
     .stdout_fd = -1,
@@ -94,8 +94,8 @@ struct {
     char                  new_executable[PATH_MAX];
 } downloader = {
     .runtime.pid = 0,
-    .runtime.bear_after = {0},
-    .runtime.kill_after = {0},
+    .runtime.bear_delay = {0},
+    .runtime.kill_delay = {0},
     .runtime.bear = bear_downloader,
     .signature = {0},
     .slen = 0,
@@ -500,7 +500,7 @@ bear_executor(void) {
 static void
 bear_child(EV_P_ ev_timer *w, int revents) {
     int ret = -1;
-    struct ProcessRuntime *proc = container_of(w, struct ProcessRuntime, bear_after);
+    struct ProcessRuntime *proc = container_of(w, struct ProcessRuntime, bear_delay);
 
     ret = proc->bear();
     if (ret < 0) {
@@ -513,7 +513,7 @@ bear_child(EV_P_ ev_timer *w, int revents) {
 
 static void
 kill_child(EV_P_ ev_timer *w, int revents) {
-    struct ProcessRuntime *proc = container_of(w, struct ProcessRuntime, kill_after);
+    struct ProcessRuntime *proc = container_of(w, struct ProcessRuntime, kill_delay);
 
     INFO("stop process %d timeout, force kill it now!", proc->pid);
     kill(proc->pid, SIGKILL);
@@ -523,11 +523,11 @@ kill_child(EV_P_ ev_timer *w, int revents) {
 static void
 bear_children(EV_P_ ev_idle *w, int revents) {
     if (arguments.update_url[0] != 0) {
-        bear_child(EV_A_ &downloader.runtime.bear_after, revents);
+        bear_child(EV_A_ &downloader.runtime.bear_delay, revents);
     }
 
     if (executor.executable_existed) {
-        bear_child(EV_A_ &executor.runtime.bear_after, revents);
+        bear_child(EV_A_ &executor.runtime.bear_delay, revents);
     }
 
     ev_idle_stop(EV_A_ w);
@@ -548,11 +548,11 @@ dispose_zombies(EV_P_ ev_child *w, int revents) {
         if (quit_all) {
             ev_break(EV_A_ EVBREAK_ALL);
         } else {
-            // Ensure no one threat me. If executor was exited because SIGTERM, kill_after always
+            // Ensure no one threat me. If executor was exited because SIGTERM, kill_delay always
         	// active, should stop it.
-            ev_timer_stop(EV_A_ &executor.runtime.kill_after);
+            ev_timer_stop(EV_A_ &executor.runtime.kill_delay);
             // Wait if restart interval is not 0.
-            ev_timer_again(EV_A_ &executor.runtime.bear_after);
+            ev_timer_again(EV_A_ &executor.runtime.bear_delay);
         }
     } else if (w->rpid == downloader.runtime.pid) {
         downloader.runtime.pid = 0;
@@ -566,21 +566,21 @@ dispose_zombies(EV_P_ ev_child *w, int revents) {
             INFO("downloader process exit with status %d", WEXITSTATUS(w->rstatus));
             // New version executable was ready, restart the command.
             if (WEXITSTATUS(w->rstatus) == DOWNLOADER_EXIT_REASON_NEW_VERSION_FOUND) {
-                if (executor.runtime.pid != 0 && !ev_is_active(&executor.runtime.kill_after)) {
+                if (executor.runtime.pid != 0 && !ev_is_active(&executor.runtime.kill_delay)) {
                     // executor is running and no one killing it, kill it now.
                     INFO("stopping command %s pid %d ...", arguments.command_path,
                             executor.runtime.pid);
                     kill(executor.runtime.pid, SIGTERM);
-                    ev_timer_again(EV_A_ &executor.runtime.kill_after);
-                } else if (executor.runtime.pid == 0 && !ev_is_active(&executor.runtime.bear_after)) {
+                    ev_timer_again(EV_A_ &executor.runtime.kill_delay);
+                } else if (executor.runtime.pid == 0 && !ev_is_active(&executor.runtime.bear_delay)) {
                     // executor is not running and no one bearing it, bear it now.
-                    bear_child(EV_A_ &executor.runtime.bear_after, revents);
+                    bear_child(EV_A_ &executor.runtime.bear_delay, revents);
                 }
             }
         }
 
         // trigger downloader after update interval.
-        ev_timer_again(EV_A_ &downloader.runtime.bear_after);
+        ev_timer_again(EV_A_ &downloader.runtime.bear_delay);
     } else {
         ERROR("unknown child process exited: %d", w->rpid);
     }
@@ -595,7 +595,7 @@ kill_executor(EV_P_ ev_signal *w, int revents) {
     // kill the command.
     INFO("sending SIGTERM to command %s ...", arguments.command_path);
     kill(executor.runtime.pid, SIGTERM);
-    ev_timer_again(EV_A_ &executor.runtime.kill_after);
+    ev_timer_again(EV_A_ &executor.runtime.kill_delay);
 }
 
 static void
@@ -630,10 +630,10 @@ run_main_loop() {
     ev_idle_init(&idle_watcher, bear_children);
     ev_idle_start(EV_DEFAULT_ &idle_watcher);
 
-    ev_timer_init(&executor.runtime.bear_after, bear_child, 0, arguments.restart_interval);
-    ev_timer_init(&executor.runtime.kill_after, kill_child, 0, MAX_KILL_TIMEOUT);
-    ev_timer_init(&downloader.runtime.bear_after, bear_child, 0, arguments.update_interval);
-    ev_timer_init(&downloader.runtime.kill_after, kill_child, 0, MAX_KILL_TIMEOUT);
+    ev_timer_init(&executor.runtime.bear_delay, bear_child, 0, arguments.restart_interval);
+    ev_timer_init(&executor.runtime.kill_delay, kill_child, 0, MAX_KILL_TIMEOUT);
+    ev_timer_init(&downloader.runtime.bear_delay, bear_child, 0, arguments.update_interval);
+    ev_timer_init(&downloader.runtime.kill_delay, kill_child, 0, MAX_KILL_TIMEOUT);
 
     if (ev_run(EV_DEFAULT_ 0)) {
         // ev_break() cause exit, it is normal.
