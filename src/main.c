@@ -267,11 +267,11 @@ verify_signature(const char *path, char signature[], int slen, char cert[], int 
     BIO *cert_bio = NULL;
     PKCS7 *p7 = NULL;
     X509 *x509_cert = NULL;
-    X509_STORE *x509_cert_store = NULL;
+    STACK_OF(X509) *x509_stack = NULL;
 
     data_bio = BIO_new_file(path, "r");
     if (!data_bio) {
-        ERROR("BIO_new_mem_buf() data bio");
+        ERROR("BIO_new_file() data bio");
         ret = -1;
         goto exit;
     }
@@ -304,29 +304,31 @@ verify_signature(const char *path, char signature[], int slen, char cert[], int 
         goto exit;
     }
 
-    x509_cert_store = X509_STORE_new();
-    if (!x509_cert_store) {
-        ERROR("X509_STORE_new()");
+    x509_stack = sk_X509_new_null();
+    if (!x509_stack) {
+        ERROR("sk_X509_new_null()");
         ret = -1;
         goto exit;
     }
 
-    ret = X509_STORE_add_cert(x509_cert_store, x509_cert);
-    if (ret < 0) {
-        ERROR("X509_STORE_add_cert(): %s", ERR_reason_error_string(ret));
+    if (!sk_X509_push(x509_stack, x509_cert)) {
+        ERROR("sk_X509_push()");
         ret = -1;
         goto exit;
     }
 
-    ret = PKCS7_verify(p7, NULL, x509_cert_store, data_bio, NULL, 0);
+    //the cert was in stack now, it's life cycle was associate to the stack.
+    x509_cert = NULL;
+
+    ret = PKCS7_verify(p7, x509_stack, NULL, data_bio, NULL, PKCS7_NOINTERN|PKCS7_NOVERIFY);
     if (ret == 1) {
         ret = 0;
         goto exit;
-    } else if (ret == -1) {
-        ERROR("PKCS7_verify(): %s", ERR_reason_error_string(ret));
+    } else if (ret == 0) {
         ret = -1;
         goto exit;
     } else {
+        ERROR("PKCS7_verify(): %s", ERR_reason_error_string(ret));
         ret = -1;
         goto exit;
     }
@@ -352,8 +354,8 @@ exit:
         X509_free(x509_cert);
     }
 
-    if (x509_cert_store) {
-        X509_STORE_free(x509_cert_store);
+    if (x509_stack) {
+        sk_X509_pop_free(x509_stack, X509_free);
     }
 
     return ret;
@@ -507,7 +509,7 @@ bear_child(EV_P_ ev_timer *w, int revents) {
         ERROR("bear child failed.");
         ev_timer_again(EV_A_ w);
     } else {
-    	ev_timer_stop(EV_A_ w);
+        ev_timer_stop(EV_A_ w);
     }
 }
 
@@ -549,7 +551,7 @@ dispose_zombies(EV_P_ ev_child *w, int revents) {
             ev_break(EV_A_ EVBREAK_ALL);
         } else {
             // Ensure no one threat me. If executor was exited because SIGTERM, kill_delay always
-        	// active, should stop it.
+            // active, should stop it.
             ev_timer_stop(EV_A_ &executor.runtime.kill_delay);
             // Wait if restart interval is not 0.
             ev_timer_again(EV_A_ &executor.runtime.bear_delay);
