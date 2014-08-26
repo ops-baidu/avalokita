@@ -7,3 +7,5 @@ Makefile
 install_manifest.txt
 output/
 build/
+tools/encrypt_privkey.sh
+tools/update_web_files.sh

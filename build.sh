@@ -21,6 +21,8 @@ make DESTDIR="$(pwd)/../output" install
 cd -
 
 cd output
+cp -r ../tools .
+rm -rf tools/.svn
 mkdir avalokita-${SCMPF_MODULE_VERSION}
 cp -r bin avalokita-${SCMPF_MODULE_VERSION}
 tar --owner=0 --group=0 -czvf avalokita.tgz avalokita-${SCMPF_MODULE_VERSION}
