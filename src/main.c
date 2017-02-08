@@ -143,7 +143,7 @@ download(const char *url, size_t writer(void *, size_t, size_t, void *), void *w
     int i = 0;
     long status = 0;
     CURL *curl = NULL;
-    CURLcode ret = 0;
+    CURLcode ret = CURLE_OK;
 
     curl = curl_easy_init();
     if (!curl){
@@ -323,9 +323,6 @@ verify_signature(const char *path, char signature[], int slen, char cert[], int 
     ret = PKCS7_verify(p7, x509_stack, NULL, data_bio, NULL, PKCS7_NOINTERN|PKCS7_NOVERIFY);
     if (ret == 1) {
         ret = 0;
-        goto exit;
-    } else if (ret == 0) {
-        ret = -1;
         goto exit;
     } else {
         ERROR("PKCS7_verify(): %s", ERR_reason_error_string(ret));

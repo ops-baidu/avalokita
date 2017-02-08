@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 [ ! -r "$1" ] && {
     echo "USAGE: $0 [data file] [signature file]"
     exit 1
