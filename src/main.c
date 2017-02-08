@@ -320,12 +320,15 @@ verify_signature(const char *path, char signature[], int slen, char cert[], int 
     //the cert was in stack now, it's life cycle was associate to the stack.
     x509_cert = NULL;
 
+    // clean previous error numbers;
+    while (ERR_get_error() != 0);
+
     ret = PKCS7_verify(p7, x509_stack, NULL, data_bio, NULL, PKCS7_NOINTERN|PKCS7_NOVERIFY);
     if (ret == 1) {
         ret = 0;
         goto exit;
     } else {
-        ERROR("PKCS7_verify(): %s", ERR_reason_error_string(ret));
+        ERROR("PKCS7_verify(): %s", ERR_reason_error_string(ERR_get_error()));
         ret = -1;
         goto exit;
     }
@@ -362,6 +365,10 @@ static int
 downloader_process(void) {
     int ret = -1;
     FILE *fp = NULL;
+
+    // initialize openssl library.
+    ERR_load_crypto_strings();
+    OpenSSL_add_all_algorithms();
 
     // rename() is not a atomic operation even both old path and new path are in one device. While
     // overwrite case, rename() cause a intermediate state just like ln(). So unlink() files at
