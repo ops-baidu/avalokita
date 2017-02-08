@@ -5,6 +5,7 @@
 #include <ev.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -130,7 +131,7 @@ write_executable(void *contents, size_t size, size_t nmemb, void *userp) {
 
     ret = fwrite(contents, size, nmemb, fp);
     if (ret < 0) {
-        ERROR_LIBC("fwrite()");
+        ERROR_LIBC("fwrite");
         return -1;
     }
 
@@ -375,7 +376,7 @@ downloader_process(void) {
     // first is necessary.
     ret = unlink(downloader.new_executable);
     if (ret < 0 && errno != ENOENT) {
-        ERROR_LIBC("unlink() on %s", downloader.new_executable);
+        ERROR_LIBC("unlink %s", downloader.new_executable);
         return DOWNLOADER_EXIT_REASON_ERROR;
     }
 
@@ -398,7 +399,7 @@ downloader_process(void) {
 
     fp = fopen(downloader.new_executable, "wb");
     if (!fp) {
-        ERROR_LIBC("fopen() on %s", arguments.command_path);
+        ERROR_LIBC("fopen %s", arguments.command_path);
         return DOWNLOADER_EXIT_REASON_ERROR;
     }
 
@@ -418,13 +419,13 @@ downloader_process(void) {
 
     ret = rename(downloader.new_executable, arguments.command_path);
     if (ret < 0) {
-        ERROR_LIBC("rename()");
+        ERROR_LIBC("rename %s to %s", downloader.new_executable, arguments.command_path);
         return DOWNLOADER_EXIT_REASON_ERROR;
     }
 
     ret = chmod(arguments.command_path, 0755);
     if (ret < 0) {
-        ERROR_LIBC("chmod()");
+        ERROR_LIBC("chmod %s", arguments.command_path);
         return DOWNLOADER_EXIT_REASON_ERROR;
     }
 
@@ -438,7 +439,7 @@ tell_child_do_not_live_alone(void) {
 
     ret = prctl(PR_SET_PDEATHSIG, SIGKILL);
     if (ret < 0) {
-        ERROR_LIBC("prctl()");
+        ERROR_LIBC("prctl");
         exit(127);
     }
 
@@ -458,7 +459,7 @@ bear_downloader(void) {
 
     ret = fork();
     if (ret < 0) {
-        ERROR_LIBC("fork()");
+        ERROR_LIBC("fork");
         return -1;
     } else if (ret == 0) {
         tell_child_do_not_live_alone();
@@ -478,20 +479,20 @@ bear_executor(void) {
 
     ret = fork();
     if (ret < 0) {
-        ERROR_LIBC("fork()");
+        ERROR_LIBC("fork");
         return -1;
     } else if (ret == 0) {
         tell_child_do_not_live_alone();
 
         ret = dup2(executor.stdout_fd, STDOUT_FILENO);
         if (ret < 0) {
-            ERROR_LIBC("dup2() for stdout");
+            ERROR_LIBC("dup2 stdout");
             exit(127);
         }
 
         ret = dup2(executor.stderr_fd, STDERR_FILENO);
         if (ret < 0) {
-            ERROR_LIBC("dup2() for stderr");
+            ERROR_LIBC("dup2 stderr");
             exit(127);
         }
 
@@ -661,32 +662,32 @@ get_file_lock(void) {
 
     fd = open(arguments.file_lock, O_RDWR | O_CREAT, 0640);
     if (fd < 0) {
-        ERROR_LIBC("open %s failed", arguments.file_lock);
+        ERROR_LIBC("open %s", arguments.file_lock);
         return -1;
     }
 
     ret = fcntl(fd, F_SETFD, FD_CLOEXEC);
     if (ret < 0) {
-        ERROR_LIBC("fcntl() F_SETFD FD_CLOEXEC");
+        ERROR_LIBC("fcntl F_SETFD FD_CLOEXEC");
         return -1;
     }
 
     ret = fcntl(fd, F_SETLK, &lock);
     if (ret < 0) {
-        ERROR_LIBC("fcntl() F_SETLK");
+        ERROR_LIBC("fcntl F_SETLK");
         return -1;
     }
 
     ret = ftruncate(fd, 0);
     if (ret < 0) {
-        ERROR_LIBC("ftruncate()");
+        ERROR_LIBC("ftruncate");
         return -1;
     }
 
     snprintf(buf, sizeof(buf), "%d\n", getpid());
     ret = write(fd, buf, strlen(buf));
     if (ret < 0) {
-        ERROR_LIBC("write()");
+        ERROR_LIBC("write");
         return -1;
     }
 
@@ -701,7 +702,7 @@ daemonize(void) {
 
     pid = fork();
     if(pid < 0) {
-        ERROR_LIBC("fork()");
+        ERROR_LIBC("fork");
         return -1;
     } else if(pid > 0) {
         exit(0);
@@ -969,7 +970,7 @@ main(int argc, char *argv[]) {
     // initialize file descriptors for commands.
     ret = open(arguments.stdout_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
     if (ret < 0) {
-        ERROR_LIBC("open() %s", arguments.stdout_file);
+        ERROR_LIBC("open %s", arguments.stdout_file);
         return 1;
     }
 
@@ -977,7 +978,7 @@ main(int argc, char *argv[]) {
 
     ret = open(arguments.stderr_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
     if (ret < 0) {
-        ERROR_LIBC("open() %s", arguments.stderr_file);
+        ERROR_LIBC("open %s", arguments.stderr_file);
         return 1;
     }
 
@@ -992,14 +993,14 @@ main(int argc, char *argv[]) {
         // read certificate into memory, it is safer.
         fd = open(arguments.certificate, O_RDONLY);
         if (fd < 0) {
-            ERROR_LIBC("open()");
+            ERROR_LIBC("open %s", arguments.certificate);
             return 1;
         }
 
         // the buffer size is big enough for common PEM format certificates.
         ret = read(fd, downloader.cert, sizeof downloader.cert);
         if (ret < 0) {
-            ERROR_LIBC("read()");
+            ERROR_LIBC("read");
             return 1;
         }
 
