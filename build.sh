@@ -1,66 +1,39 @@
 #!/bin/sh
 
-[ -z "${SCMPF_MODULE_VERSION}" ] && {
-    SCMPF_MODULE_VERSION=1.0.0.0
-}
+set -eu
 
-CMAKE_PATH="$(pwd)/../../noah/thirdparty/cmake/output"
-LIBEV_PATH="$(pwd)/../../noah/thirdparty/libev/output"
-LIBCURL_PATH="$(pwd)/../../noah/thirdparty/libcurl/output"
-OPENSSL_PATH="$(pwd)/../../noah/thirdparty/openssl/output/usr"
-ZLIB_PATH="$(pwd)/../../noah/thirdparty/zlib/output/usr"
+rm -rf build output && mkdir -p build output
 
-PATH="$CMAKE_PATH/bin:$LIBEV_PATH/bin:$LIBCURL_PATH/bin:$OPENSSL_PATH/bin:$ZLIB_PATH/bin:$PATH"
-export CMAKE_INCLUDE_PATH="$LIBEV_PATH/include:$LIBCURL_PATH/include:$OPENSSL_PATH/include:$ZLIB_PATH/include"
-export CMAKE_LIBRARY_PATH="$LIBEV_PATH/lib:$LIBCURL_PATH/lib:$OPENSSL_PATH/lib:$ZLIB_PATH/lib"
+cd thirdparty/curl-7.54.0
+./configure --prefix=$(pwd)/../../output --disable-shared --disable-debug \
+	--without-ssl --without-winssl --without-darwinssl --without-gnutls \
+	--without-polarssl --without-mbedtls --without-cyassl --without-nss \
+	--without-axtls --without-libpsl --without-libmetalink \
+	--without-libssh2 --without-librtmp --without-winidn --without-libidn2 \
+	--without-nghttp2 --without-zsh-functions-dir --without-ldap-lib \
+	--without-lber-lib --without-gssapi --disable-rtsp
+make -j 16
+make install
+cd -
 
-rm -rf build output && mkdir -p build && cd build
-cmake -DCMAKE_INSTALL_PREFIX=/ ..
+cd thirdparty/libev-4.24
+./configure --prefix=$(pwd)/../../output --disable-shared
+make
+make install
+cd -
+
+cd build
+VER=$(git describe --tags --always --dirty | tr '-' '.')
+export CMAKE_INCLUDE_PATH="$(pwd)/../output/include"
+export CMAKE_LIBRARY_PATH="$(pwd)/../output/lib"
+cmake3 -DCMAKE_INSTALL_PREFIX=/ -DVERSION="$VER" ..
 make
 make DESTDIR="$(pwd)/../output" install
 cd -
 
-cd output
-cp -r ../tools .
-rm -rf tools/.svn
-mkdir avalokita-${SCMPF_MODULE_VERSION}
-cp -r bin avalokita-${SCMPF_MODULE_VERSION}
-tar --owner=0 --group=0 -czvf avalokita.tgz avalokita-${SCMPF_MODULE_VERSION}
-ln avalokita.tgz avalokita-${SCMPF_MODULE_VERSION}.tgz
-rm -rf avalokita-${SCMPF_MODULE_VERSION}
-cd -
-
-mkdir -p rpmroot/{BUILD,RPMS,SOURCES,SPECS,SRPMS,TMP}
-cp output/avalokita.tgz rpmroot/SOURCES
+rm -rf rpmroot && mkdir -p rpmroot/{BUILD,RPMS,SPECS,TMP}
 cp avalokita.rpm.spec rpmroot/SPECS/avalokita.spec
-sed -i "s/#VERSION#/${SCMPF_MODULE_VERSION}/g" rpmroot/SPECS/avalokita.spec
+sed -i "s/#VERSION#/${VER}/g" rpmroot/SPECS/avalokita.spec
 rpmbuild --define "_topdir ${PWD}/rpmroot/" --define "_tmppath %{_topdir}/TMP" -bb rpmroot/SPECS/avalokita.spec
 cp -r rpmroot/RPMS/ output
-rm -rf rpmroot
 
-mkdir -p debroot/control
-echo 2.0 > debroot/debian-binary
-cp avalokita.deb.control debroot/control/control
-sed -i "s/#VERSION#/${SCMPF_MODULE_VERSION}/g" debroot/control/control
-
-mkdir -p debroot/data/opt/avalokita/bin
-install -m 755 output/bin/avalokita debroot/data/opt/avalokita/bin/
-
-cd debroot
-find data -type f | xargs md5sum | sed 's/  data\//  /g' > control/md5sums
-chmod 0644 control/*
-
-cd control
-tar --owner=0 --group=0 -czvf ../control.tar.gz *
-cd -
-
-cd data
-tar --owner=0 --group=0 -czvf ../data.tar.gz *
-cd -
-
-ar r avalokita_${SCMPF_MODULE_VERSION}-1_amd64.deb debian-binary control.tar.gz data.tar.gz
-mkdir -p ../output/DEBS
-cp avalokita_${SCMPF_MODULE_VERSION}-1_amd64.deb ../output/DEBS
-
-cd ..
-rm -rf debroot

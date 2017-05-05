@@ -809,7 +809,7 @@ print_usage(void) {
 
 static void
 print_version(void) {
-    fprintf(stderr, "%d.%d\n", VERSION_MAJOR, VERSION_MINOR);
+    fprintf(stderr, "%s\n", VERSION);
 }
 
 int
