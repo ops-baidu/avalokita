@@ -26,7 +26,7 @@ cd build
 VER=$(git describe --tags --always --dirty | tr '-' '.')
 export CMAKE_INCLUDE_PATH="$(pwd)/../output/include"
 export CMAKE_LIBRARY_PATH="$(pwd)/../output/lib"
-cmake3 -DCMAKE_INSTALL_PREFIX=/ -DVERSION="$VER" ..
+cmake -DCMAKE_INSTALL_PREFIX=/ -DVERSION="$VER" ..
 make
 make DESTDIR="$(pwd)/../output" install
 cd -
