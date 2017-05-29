@@ -42,8 +42,8 @@ struct {
     char certificate[PATH_MAX];
     int  max_executable_size;
     char file_lock[PATH_MAX];
-    char stdout_file[PATH_MAX];
-    char stderr_file[PATH_MAX];
+    char command_stdout_file[PATH_MAX];
+    char command_stderr_file[PATH_MAX];
     char *command_path;
     char **command_arguments;
 } arguments = {
@@ -54,8 +54,8 @@ struct {
     .certificate = "",
     .max_executable_size = 10485760,
     .file_lock = "daemon.pid",
-    .stdout_file = "daemon.stdout.log",
-    .stderr_file = "daemon.stderr.log",
+    .command_stdout_file = "command.out",
+    .command_stderr_file = "command.err",
     .command_path = NULL,
     .command_arguments = NULL,
 };
@@ -775,13 +775,13 @@ print_usage(void) {
             "    Singletonize the daemon by a file lock. If the file lock is locked, the\n"
             "    daemon will exit immediately. Default is \"./daemon.pid\".\n"
             "\n"
-            "  --stdout-file [filename]\n"
+            "  --command-stdout-file [filename]\n"
             "\n"
-            "    Redirect command's stdout to a file. Default is \"./daemon.stdout.log\".\n"
+            "    Redirect command's stdout to a file. Default is \"./command.out\".\n"
             "\n"
-            "  --stderr-file [filename]\n"
+            "  --command-stderr-file [filename]\n"
             "\n"
-            "    Redirect command's stderr to a file. Default is \"./daemon.stderr.log\".\n"
+            "    Redirect command's stderr to a file. Default is \"./command.err\".\n"
             "\n"
             "  --help\n"
             "\n"
@@ -822,8 +822,8 @@ main(int argc, char *argv[]) {
             {"certificate", required_argument, 0, 0},
             {"max-executable-size", required_argument, 0, 0},
             {"file-lock", required_argument, 0, 0},
-            {"stdout-file", required_argument, 0, 0},
-            {"stderr-file", required_argument, 0, 0},
+            {"command-stdout-file", required_argument, 0, 0},
+            {"command-stderr-file", required_argument, 0, 0},
             {"help", no_argument, 0, 0},
             {"version", no_argument, 0, 0},
             {0},
@@ -894,19 +894,19 @@ main(int argc, char *argv[]) {
             } else {
                 strcpy(arguments.file_lock, optarg);
             }
-        } else if (strcmp(long_opts[long_opt_idx].name, "stdout-file") == 0) {
-            if (strlen(optarg) >= sizeof arguments.stdout_file) {
-                ERROR("--stdout-file length should short than %lu", sizeof arguments.stdout_file);
+        } else if (strcmp(long_opts[long_opt_idx].name, "command-stdout-file") == 0) {
+            if (strlen(optarg) >= sizeof arguments.command_stdout_file) {
+                ERROR("--command-stdout-file length should short than %lu", sizeof arguments.command_stdout_file);
                 return 1;
             } else {
-                strcpy(arguments.stdout_file, optarg);
+                strcpy(arguments.command_stdout_file, optarg);
             }
-        } else if (strcmp(long_opts[long_opt_idx].name, "stderr-file") == 0) {
-            if (strlen(optarg) >= sizeof arguments.stderr_file) {
-                ERROR("--stderr-file length should short than %lu", sizeof arguments.stderr_file);
+        } else if (strcmp(long_opts[long_opt_idx].name, "command-stderr-file") == 0) {
+            if (strlen(optarg) >= sizeof arguments.command_stderr_file) {
+                ERROR("--command-stderr-file length should short than %lu", sizeof arguments.command_stderr_file);
                 return 1;
             } else {
-                strcpy(arguments.stderr_file, optarg);
+                strcpy(arguments.command_stderr_file, optarg);
             }
         } else if (strcmp(long_opts[long_opt_idx].name, "help") == 0) {
             print_usage();
@@ -968,17 +968,17 @@ main(int argc, char *argv[]) {
     }
 
     // initialize file descriptors for commands.
-    ret = open(arguments.stdout_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    ret = open(arguments.command_stdout_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
     if (ret < 0) {
-        ERROR_LIBC("open %s", arguments.stdout_file);
+        ERROR_LIBC("open %s", arguments.command_stdout_file);
         return 1;
     }
 
     executor.stdout_fd = ret;
 
-    ret = open(arguments.stderr_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    ret = open(arguments.command_stderr_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
     if (ret < 0) {
-        ERROR_LIBC("open %s", arguments.stderr_file);
+        ERROR_LIBC("open %s", arguments.command_stderr_file);
         return 1;
     }
 
