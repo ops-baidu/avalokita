@@ -37,7 +37,7 @@
 #define INFO(fmt, args...) \
 do \
 { \
-    fprintf(stdout, fmt " \e[36m[%s:%d %s()]\033[0m\n", \
+    dprintf(1, fmt " \e[36m[%s:%d %s()]\033[0m\n", \
             ##args, __SOURCE__, __LINE__, __FUNCTION__); \
 } \
 while (0)
@@ -45,7 +45,7 @@ while (0)
 #define ERROR(fmt, args...) \
 do \
 { \
-    fprintf(stderr, "\e[33mERROR: " fmt "\033[0m \e[36m[%s:%d %s()]\033[0m\n", \
+    dprintf(2, "\e[33mERROR: " fmt "\033[0m \e[36m[%s:%d %s()]\033[0m\n", \
             ##args, __SOURCE__, __LINE__, __FUNCTION__); \
 } \
 while (0)
