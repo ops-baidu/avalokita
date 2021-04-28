@@ -1,11 +1,2 @@
-.cproject
-.project
-cmake_install.cmake
-CMakeCache.txt
-CMakeFiles
-Makefile
-install_manifest.txt
-output/
-build/
-tools/encrypt_privkey.sh
-tools/update_web_files.sh
+.idea
+cmake-build-debug/

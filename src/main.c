@@ -1,10 +1,12 @@
 #define _XOPEN_SOURCE 800
 #define _BSD_SOURCE
 #define _GNU_SOURCE
+
 #include <getopt.h>
 #include <ev.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -34,35 +36,36 @@
 #define DOWNLOAD_RETRY_INTERVAL 30
 
 struct {
-    int  restart_interval;
-    int  update_interval;
+    int restart_interval;
+    int update_interval;
     char update_url[MAX_URL_LENGTH];
     char signature_url[MAX_URL_LENGTH];
     char certificate[PATH_MAX];
-    int  max_executable_size;
+    int max_executable_size;
     char file_lock[PATH_MAX];
-    char stdout_file[PATH_MAX];
-    char stderr_file[PATH_MAX];
+    char command_stdout_file[PATH_MAX];
+    char command_stderr_file[PATH_MAX];
     char *command_path;
     char **command_arguments;
 } arguments = {
-    .restart_interval = 1,
-    .update_interval = 600,
-    .update_url = "",
-    .signature_url = "",
-    .certificate = "",
-    .max_executable_size = 10485760,
-    .file_lock = "daemon.pid",
-    .stdout_file = "daemon.stdout.log",
-    .stderr_file = "daemon.stderr.log",
-    .command_path = NULL,
-    .command_arguments = NULL,
+        .restart_interval = 1,
+        .update_interval = 600,
+        .update_url = "",
+        .signature_url = "",
+        .certificate = "",
+        .max_executable_size = 10485760,
+        .file_lock = "daemon.pid",
+        .command_stdout_file = "command.out",
+        .command_stderr_file = "command.err",
+        .command_path = NULL,
+        .command_arguments = NULL,
 };
 
 struct ProcessRuntime {
     pid_t pid;
     ev_timer bear_delay;
     ev_timer kill_delay;
+
     int (*bear)(void);
 };
 
@@ -70,38 +73,38 @@ static int bear_executor(void);
 
 struct {
     struct ProcessRuntime runtime;
-    int                   executable_existed;
-    int                   stdout_fd;
-    int                   stderr_fd;
+    int executable_existed;
+    int stdout_fd;
+    int stderr_fd;
 } executor = {
-    .runtime.pid = 0,
-    .runtime.bear_delay = {0},
-    .runtime.kill_delay = {0},
-    .runtime.bear = bear_executor,
-    .executable_existed = 0,
-    .stdout_fd = -1,
-    .stderr_fd = -1,
+        .runtime.pid = 0,
+        .runtime.bear_delay = {0},
+        .runtime.kill_delay = {0},
+        .runtime.bear = bear_executor,
+        .executable_existed = 0,
+        .stdout_fd = -1,
+        .stderr_fd = -1,
 };
 
 static int bear_downloader(void);
 
 struct {
     struct ProcessRuntime runtime;
-    char                  signature[MAX_SIGNATURE_LENGTH];
-    int                   slen;
-    char                  cert[MAX_CERTIFICATE_LENGTH];
-    int                   clen;
-    char                  new_executable[PATH_MAX];
+    char signature[MAX_SIGNATURE_LENGTH];
+    int slen;
+    char cert[MAX_CERTIFICATE_LENGTH];
+    int clen;
+    char new_executable[PATH_MAX];
 } downloader = {
-    .runtime.pid = 0,
-    .runtime.bear_delay = {0},
-    .runtime.kill_delay = {0},
-    .runtime.bear = bear_downloader,
-    .signature = {0},
-    .slen = 0,
-    .cert = {0},
-    .clen = 0,
-    .new_executable = {0},
+        .runtime.pid = 0,
+        .runtime.bear_delay = {0},
+        .runtime.kill_delay = {0},
+        .runtime.bear = bear_downloader,
+        .signature = {0},
+        .slen = 0,
+        .cert = {0},
+        .clen = 0,
+        .new_executable = {0},
 };
 
 enum DownloaderExitReason {
@@ -130,7 +133,7 @@ write_executable(void *contents, size_t size, size_t nmemb, void *userp) {
 
     ret = fwrite(contents, size, nmemb, fp);
     if (ret < 0) {
-        ERROR_LIBC("fwrite()");
+        ERROR_LIBC("fwrite");
         return -1;
     }
 
@@ -139,68 +142,68 @@ write_executable(void *contents, size_t size, size_t nmemb, void *userp) {
 
 static int
 download(const char *url, size_t writer(void *, size_t, size_t, void *), void *writer_data,
-        size_t max_file_size) {
+         size_t max_file_size) {
     int i = 0;
     long status = 0;
     CURL *curl = NULL;
-    CURLcode ret = 0;
+    CURLcode ret = CURLE_OK;
 
     curl = curl_easy_init();
-    if (!curl){
+    if (!curl) {
         ERROR("curl initialize failed!");
         return -1;
     }
 
     ret = curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
-    if(ret != CURLE_OK) {
+    if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
 
     ret = curl_easy_setopt(curl, CURLOPT_URL, url);
-    if(ret != CURLE_OK) {
+    if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
 
     ret = curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
-    if(ret != CURLE_OK) {
+    if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
 
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 60);
-    if(ret != CURLE_OK) {
+    if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
 
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300);
-    if(ret != CURLE_OK) {
+    if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
 
     ret = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    if(ret != CURLE_OK) {
+    if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
 
     ret = curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
-    if(ret != CURLE_OK) {
+    if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
 
     ret = curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
-    if(ret != CURLE_OK) {
+    if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
 
     ret = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    if(ret != CURLE_OK) {
+    if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
@@ -225,7 +228,7 @@ download(const char *url, size_t writer(void *, size_t, size_t, void *), void *w
 
     for (i = 0; i < DOWNLOAD_RETRIES; i++) {
         ret = curl_easy_perform(curl);
-        if(ret != CURLE_OK) {
+        if (ret != CURLE_OK) {
             ERROR("curl_easy_perform(): %s", curl_easy_strerror(ret));
             goto sleep_and_continue;
         }
@@ -243,7 +246,7 @@ download(const char *url, size_t writer(void *, size_t, size_t, void *), void *w
 
         break;
 
-sleep_and_continue:
+        sleep_and_continue:
         sleep(DOWNLOAD_RETRY_INTERVAL);
     }
 
@@ -254,7 +257,7 @@ sleep_and_continue:
     curl_easy_cleanup(curl);
     return 0;
 
-fail:
+    fail:
     curl_easy_cleanup(curl);
     return -1;
 }
@@ -320,20 +323,20 @@ verify_signature(const char *path, char signature[], int slen, char cert[], int 
     //the cert was in stack now, it's life cycle was associate to the stack.
     x509_cert = NULL;
 
-    ret = PKCS7_verify(p7, x509_stack, NULL, data_bio, NULL, PKCS7_NOINTERN|PKCS7_NOVERIFY);
+    // clean previous error numbers;
+    while (ERR_get_error() != 0);
+
+    ret = PKCS7_verify(p7, x509_stack, NULL, data_bio, NULL, PKCS7_NOINTERN | PKCS7_NOVERIFY);
     if (ret == 1) {
         ret = 0;
         goto exit;
-    } else if (ret == 0) {
-        ret = -1;
-        goto exit;
     } else {
-        ERROR("PKCS7_verify(): %s", ERR_reason_error_string(ret));
+        ERROR("PKCS7_verify(): %s", ERR_reason_error_string(ERR_get_error()));
         ret = -1;
         goto exit;
     }
 
-exit:
+    exit:
     if (data_bio) {
         BIO_vfree(data_bio);
     }
@@ -366,12 +369,16 @@ downloader_process(void) {
     int ret = -1;
     FILE *fp = NULL;
 
+    // initialize openssl library.
+    ERR_load_crypto_strings();
+    OpenSSL_add_all_algorithms();
+
     // rename() is not a atomic operation even both old path and new path are in one device. While
     // overwrite case, rename() cause a intermediate state just like ln(). So unlink() files at
     // first is necessary.
     ret = unlink(downloader.new_executable);
     if (ret < 0 && errno != ENOENT) {
-        ERROR_LIBC("unlink() on %s", downloader.new_executable);
+        ERROR_LIBC("unlink %s", downloader.new_executable);
         return DOWNLOADER_EXIT_REASON_ERROR;
     }
 
@@ -383,7 +390,7 @@ downloader_process(void) {
     }
 
     ret = verify_signature(arguments.command_path, downloader.signature, downloader.slen,
-            downloader.cert, downloader.clen);
+                           downloader.cert, downloader.clen);
     if (ret == 0) {
         // verify success, don't need any upgrade.
         INFO("the command executable is newest already.");
@@ -394,7 +401,7 @@ downloader_process(void) {
 
     fp = fopen(downloader.new_executable, "wb");
     if (!fp) {
-        ERROR_LIBC("fopen() on %s", arguments.command_path);
+        ERROR_LIBC("fopen %s", arguments.command_path);
         return DOWNLOADER_EXIT_REASON_ERROR;
     }
 
@@ -406,7 +413,7 @@ downloader_process(void) {
     }
 
     ret = verify_signature(downloader.new_executable, downloader.signature, downloader.slen,
-            downloader.cert, downloader.clen);
+                           downloader.cert, downloader.clen);
     if (ret < 0) {
         ERROR("verify downloaded executable failed.");
         return DOWNLOADER_EXIT_REASON_ERROR;
@@ -414,13 +421,13 @@ downloader_process(void) {
 
     ret = rename(downloader.new_executable, arguments.command_path);
     if (ret < 0) {
-        ERROR_LIBC("rename()");
+        ERROR_LIBC("rename %s to %s", downloader.new_executable, arguments.command_path);
         return DOWNLOADER_EXIT_REASON_ERROR;
     }
 
     ret = chmod(arguments.command_path, 0755);
     if (ret < 0) {
-        ERROR_LIBC("chmod()");
+        ERROR_LIBC("chmod %s", arguments.command_path);
         return DOWNLOADER_EXIT_REASON_ERROR;
     }
 
@@ -434,7 +441,7 @@ tell_child_do_not_live_alone(void) {
 
     ret = prctl(PR_SET_PDEATHSIG, SIGKILL);
     if (ret < 0) {
-        ERROR_LIBC("prctl()");
+        ERROR_LIBC("prctl");
         exit(127);
     }
 
@@ -454,7 +461,7 @@ bear_downloader(void) {
 
     ret = fork();
     if (ret < 0) {
-        ERROR_LIBC("fork()");
+        ERROR_LIBC("fork");
         return -1;
     } else if (ret == 0) {
         tell_child_do_not_live_alone();
@@ -474,20 +481,20 @@ bear_executor(void) {
 
     ret = fork();
     if (ret < 0) {
-        ERROR_LIBC("fork()");
+        ERROR_LIBC("fork");
         return -1;
     } else if (ret == 0) {
         tell_child_do_not_live_alone();
 
-        ret = dup2(executor.stdout_fd, STDOUT_FILENO);
+        ret = dup2(executor.stdout_fd, 1);
         if (ret < 0) {
-            ERROR_LIBC("dup2() for stdout");
+            ERROR_LIBC("dup2 executor stdout");
             exit(127);
         }
 
-        ret = dup2(executor.stderr_fd, STDERR_FILENO);
+        ret = dup2(executor.stderr_fd, 2);
         if (ret < 0) {
-            ERROR_LIBC("dup2() for stderr");
+            ERROR_LIBC("dup2 executor stderr");
             exit(127);
         }
 
@@ -541,10 +548,10 @@ dispose_zombies(EV_P_ ev_child *w, int revents) {
         executor.runtime.pid = 0;
 
         if (WIFEXITED(w->rstatus)) {
-           INFO("command %s exit with status %d.", arguments.command_path, WEXITSTATUS(w->rstatus));
+            INFO("command %s exit with status %d.", arguments.command_path, WEXITSTATUS(w->rstatus));
         } else if (WIFSIGNALED(w->rstatus)) {
-           INFO("command %s exit because a signal %s.", arguments.command_path,
-                   strsignal(WTERMSIG(w->rstatus)));
+            INFO("command %s exit because a signal %s.", arguments.command_path,
+                 strsignal(WTERMSIG(w->rstatus)));
         }
 
         if (quit_all) {
@@ -571,7 +578,7 @@ dispose_zombies(EV_P_ ev_child *w, int revents) {
                 if (executor.runtime.pid != 0 && !ev_is_active(&executor.runtime.kill_delay)) {
                     // executor is running and no one killing it, kill it now.
                     INFO("stopping command %s pid %d ...", arguments.command_path,
-                            executor.runtime.pid);
+                         executor.runtime.pid);
                     kill(executor.runtime.pid, SIGTERM);
                     ev_timer_again(EV_A_ &executor.runtime.kill_delay);
                 } else if (executor.runtime.pid == 0 && !ev_is_active(&executor.runtime.bear_delay)) {
@@ -601,7 +608,7 @@ kill_executor(EV_P_ ev_signal *w, int revents) {
 }
 
 static void
-quit(EV_P_ ev_signal *w, int revents){
+quit(EV_P_ ev_signal *w, int revents) {
     if (executor.runtime.pid == 0) {
         // command is not running, just break loop.
         ev_break(EV_A_ EVBREAK_ALL);
@@ -657,32 +664,32 @@ get_file_lock(void) {
 
     fd = open(arguments.file_lock, O_RDWR | O_CREAT, 0640);
     if (fd < 0) {
-        ERROR_LIBC("open %s failed", arguments.file_lock);
+        ERROR_LIBC("open %s", arguments.file_lock);
         return -1;
     }
 
     ret = fcntl(fd, F_SETFD, FD_CLOEXEC);
     if (ret < 0) {
-        ERROR_LIBC("fcntl() F_SETFD FD_CLOEXEC");
+        ERROR_LIBC("fcntl F_SETFD FD_CLOEXEC");
         return -1;
     }
 
     ret = fcntl(fd, F_SETLK, &lock);
     if (ret < 0) {
-        ERROR_LIBC("fcntl() F_SETLK");
+        ERROR_LIBC("fcntl F_SETLK");
         return -1;
     }
 
     ret = ftruncate(fd, 0);
     if (ret < 0) {
-        ERROR_LIBC("ftruncate()");
+        ERROR_LIBC("ftruncate");
         return -1;
     }
 
     snprintf(buf, sizeof(buf), "%d\n", getpid());
     ret = write(fd, buf, strlen(buf));
     if (ret < 0) {
-        ERROR_LIBC("write()");
+        ERROR_LIBC("write");
         return -1;
     }
 
@@ -696,20 +703,55 @@ daemonize(void) {
     int max_fd = 0;
 
     pid = fork();
-    if(pid < 0) {
-        ERROR_LIBC("fork()");
+    if (pid < 0) {
+        ERROR_LIBC("fork");
         return -1;
-    } else if(pid > 0) {
+    } else if (pid > 0) {
         exit(0);
     }
 
     setsid();
     umask(022);
-    fclose(stdin);
 
+    close(0);
     max_fd = getdtablesize();
     for (i = 3; i < max_fd; i++) {
         close(i);
+    }
+
+    return 0;
+}
+
+static int
+set_std_fds_append_mode(void) {
+    int ret = -1, fd = 1;
+    unsigned int ftype = 0;
+    struct stat st = {0};
+
+    for (fd = 1; fd <= 2; fd++) {
+        ret = fstat(fd, &st);
+        if (ret < 0) {
+            ERROR_LIBC("fstat fd %d", fd);
+            return -1;
+        }
+
+        ftype = st.st_mode & (uint) S_IFMT;
+        if (ftype != S_IFREG && ftype != S_IFBLK) {
+            // only regular file and block device need set O_APPEND flag.
+            continue;
+        }
+
+        ret = fcntl(fd, F_GETFL);
+        if (ret < 0) {
+            ERROR_LIBC("fcntl F_GETFL fd %d", fd);
+            return -1;
+        }
+
+        ret = fcntl(fd, F_SETFL, ret | O_APPEND);
+        if (ret < 0) {
+            ERROR_LIBC("fcntl F_SETFL fd %d", fd);
+            return -1;
+        }
     }
 
     return 0;
@@ -725,7 +767,7 @@ is_valid_url(const char *url) {
 
 static void
 print_usage(void) {
-    const char * usage =
+    const char *usage =
             "\n"
             "Usage: avalokita [options] command_path [command options]\n"
             "\n"
@@ -770,13 +812,13 @@ print_usage(void) {
             "    Singletonize the daemon by a file lock. If the file lock is locked, the\n"
             "    daemon will exit immediately. Default is \"./daemon.pid\".\n"
             "\n"
-            "  --stdout-file [filename]\n"
+            "  --command-stdout-file [filename]\n"
             "\n"
-            "    Redirect command's stdout to a file. Default is \"./daemon.stdout.log\".\n"
+            "    Redirect command's stdout to a file. Default is \"./command.out\".\n"
             "\n"
-            "  --stderr-file [filename]\n"
+            "  --command-stderr-file [filename]\n"
             "\n"
-            "    Redirect command's stderr to a file. Default is \"./daemon.stderr.log\".\n"
+            "    Redirect command's stderr to a file. Default is \"./command.err\".\n"
             "\n"
             "  --help\n"
             "\n"
@@ -804,23 +846,23 @@ print_usage(void) {
 
 static void
 print_version(void) {
-    fprintf(stderr, "%d.%d\n", VERSION_MAJOR, VERSION_MINOR);
+    fprintf(stderr, "%s\n", VERSION);
 }
 
 int
 main(int argc, char *argv[]) {
     const struct option long_opts[] = {
-            {"restart-interval", required_argument, 0, 0},
-            {"update-interval", required_argument, 0, 0},
-            {"update-url", required_argument, 0, 0},
-            {"signature-url", required_argument, 0, 0},
-            {"certificate", required_argument, 0, 0},
+            {"restart-interval",    required_argument, 0, 0},
+            {"update-interval",     required_argument, 0, 0},
+            {"update-url",          required_argument, 0, 0},
+            {"signature-url",       required_argument, 0, 0},
+            {"certificate",         required_argument, 0, 0},
             {"max-executable-size", required_argument, 0, 0},
-            {"file-lock", required_argument, 0, 0},
-            {"stdout-file", required_argument, 0, 0},
-            {"stderr-file", required_argument, 0, 0},
-            {"help", no_argument, 0, 0},
-            {"version", no_argument, 0, 0},
+            {"file-lock",           required_argument, 0, 0},
+            {"command-stdout-file", required_argument, 0, 0},
+            {"command-stderr-file", required_argument, 0, 0},
+            {"help",                no_argument,       0, 0},
+            {"version",             no_argument,       0, 0},
             {0},
     };
 
@@ -829,11 +871,17 @@ main(int argc, char *argv[]) {
     int fd = -1;
     int i = 0;
 
-    while (1){
+    ret = set_std_fds_append_mode();
+    if (ret < 0) {
+        ERROR("set std fds append mode failed.");
+        return 1;
+    }
+
+    while (1) {
         ret = getopt_long(argc, argv, "", long_opts, &long_opt_idx);
         if (ret < 0) {
             break;
-        } else if (ret == '?'){
+        } else if (ret == '?') {
             print_usage();
             return 1;
         } else if (strcmp(long_opts[long_opt_idx].name, "restart-interval") == 0) {
@@ -861,7 +909,7 @@ main(int argc, char *argv[]) {
         } else if (strcmp(long_opts[long_opt_idx].name, "signature-url") == 0) {
             if (strlen(optarg) >= sizeof arguments.signature_url) {
                 ERROR("--signature-url length should short than %lu.\n",
-                        sizeof arguments.signature_url);
+                      sizeof arguments.signature_url);
                 return 1;
             } else if (!is_valid_url(optarg)) {
                 ERROR("--signature-url should be a http, https, file or ftp URL.");
@@ -889,19 +937,19 @@ main(int argc, char *argv[]) {
             } else {
                 strcpy(arguments.file_lock, optarg);
             }
-        } else if (strcmp(long_opts[long_opt_idx].name, "stdout-file") == 0) {
-            if (strlen(optarg) >= sizeof arguments.stdout_file) {
-                ERROR("--stdout-file length should short than %lu", sizeof arguments.stdout_file);
+        } else if (strcmp(long_opts[long_opt_idx].name, "command-stdout-file") == 0) {
+            if (strlen(optarg) >= sizeof arguments.command_stdout_file) {
+                ERROR("--command-stdout-file length should short than %lu", sizeof arguments.command_stdout_file);
                 return 1;
             } else {
-                strcpy(arguments.stdout_file, optarg);
+                strcpy(arguments.command_stdout_file, optarg);
             }
-        } else if (strcmp(long_opts[long_opt_idx].name, "stderr-file") == 0) {
-            if (strlen(optarg) >= sizeof arguments.stderr_file) {
-                ERROR("--stderr-file length should short than %lu", sizeof arguments.stderr_file);
+        } else if (strcmp(long_opts[long_opt_idx].name, "command-stderr-file") == 0) {
+            if (strlen(optarg) >= sizeof arguments.command_stderr_file) {
+                ERROR("--command-stderr-file length should short than %lu", sizeof arguments.command_stderr_file);
                 return 1;
             } else {
-                strcpy(arguments.stderr_file, optarg);
+                strcpy(arguments.command_stderr_file, optarg);
             }
         } else if (strcmp(long_opts[long_opt_idx].name, "help") == 0) {
             print_usage();
@@ -921,7 +969,7 @@ main(int argc, char *argv[]) {
 
     // according to execv(), we need a NULL pointer to indicate arguments end.
     int cmd_arg_count = argc - optind;
-    arguments.command_arguments = malloc(sizeof (char *) * (cmd_arg_count + 1));
+    arguments.command_arguments = malloc(sizeof(char *) * (cmd_arg_count + 1));
     arguments.command_arguments[cmd_arg_count] = NULL;
     for (i = 0; i < cmd_arg_count; i++) {
         arguments.command_arguments[i] = argv[optind + i];
@@ -937,7 +985,7 @@ main(int argc, char *argv[]) {
 
     if (arguments.update_url[0] != 0 && arguments.signature_url[0] == 0) {
         snprintf(arguments.signature_url, sizeof arguments.signature_url, "%s.sig",
-                arguments.update_url);
+                 arguments.update_url);
     }
 
     // all arguments are initialized. do real works.
@@ -963,17 +1011,17 @@ main(int argc, char *argv[]) {
     }
 
     // initialize file descriptors for commands.
-    ret = open(arguments.stdout_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    ret = open(arguments.command_stdout_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
     if (ret < 0) {
-        ERROR_LIBC("open() %s", arguments.stdout_file);
+        ERROR_LIBC("open %s", arguments.command_stdout_file);
         return 1;
     }
 
     executor.stdout_fd = ret;
 
-    ret = open(arguments.stderr_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    ret = open(arguments.command_stderr_file, O_WRONLY | O_CREAT | O_APPEND, 0600);
     if (ret < 0) {
-        ERROR_LIBC("open() %s", arguments.stderr_file);
+        ERROR_LIBC("open %s", arguments.command_stderr_file);
         return 1;
     }
 
@@ -982,20 +1030,20 @@ main(int argc, char *argv[]) {
     // Put downloaded new executable to the directory that the command live's in. Because rename()
     // in same device is atomic.
     snprintf(downloader.new_executable, sizeof downloader.new_executable, "%s.new",
-            arguments.command_path);
+             arguments.command_path);
 
     if (arguments.certificate[0] != 0) {
         // read certificate into memory, it is safer.
         fd = open(arguments.certificate, O_RDONLY);
         if (fd < 0) {
-            ERROR_LIBC("open()");
+            ERROR_LIBC("open %s", arguments.certificate);
             return 1;
         }
 
         // the buffer size is big enough for common PEM format certificates.
         ret = read(fd, downloader.cert, sizeof downloader.cert);
         if (ret < 0) {
-            ERROR_LIBC("read()");
+            ERROR_LIBC("read");
             return 1;
         }
 

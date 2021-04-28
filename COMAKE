@@ -1,7 +1,0 @@
-WORKROOT('../../../../')
-
-CONFIGS('op/oped/noah/thirdparty/libev@1.0.0.0')
-CONFIGS('op/oped/noah/thirdparty/cmake@1.0.0.0')
-CONFIGS('op/oped/noah/thirdparty/zlib@1.2.9.0')
-CONFIGS('op/oped/noah/thirdparty/openssl@1.0.4.0')
-CONFIGS('op/oped/noah/thirdparty/libcurl@7.30.1.0')
