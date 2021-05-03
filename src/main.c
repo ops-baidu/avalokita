@@ -172,13 +172,13 @@ download(const char *url, size_t writer(void *, size_t, size_t, void *), void *w
         goto fail;
     }
 
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 60);
+    ret = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 60);
     if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
     }
 
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300);
+    ret = curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300);
     if (ret != CURLE_OK) {
         ERROR("curl_easy_setopt(): %s", curl_easy_strerror(ret));
         goto fail;
@@ -687,7 +687,7 @@ get_file_lock(void) {
     }
 
     snprintf(buf, sizeof(buf), "%d\n", getpid());
-    ret = write(fd, buf, strlen(buf));
+    ret = (int) write(fd, buf, strlen(buf));
     if (ret < 0) {
         ERROR_LIBC("write");
         return -1;
@@ -1041,7 +1041,7 @@ main(int argc, char *argv[]) {
         }
 
         // the buffer size is big enough for common PEM format certificates.
-        ret = read(fd, downloader.cert, sizeof downloader.cert);
+        ret = (int)read(fd, downloader.cert, sizeof downloader.cert);
         if (ret < 0) {
             ERROR_LIBC("read");
             return 1;
